@@ -567,6 +567,7 @@ function xpInLevel(xp){xp=xp||0;const l=levelFor(xp);const base=40*(l-1)*(l-1);c
 function addXP(n){store.xp=(store.xp||0)+n;}
 function touchStreak(){const t=gToday(),y=gAddDays(-1);if(store.streak.last===t)return false;
   if(store.streak.last===y)store.streak.count++;else store.streak.count=1;store.streak.last=t;return true;}
+function setsTried(){const s=new Set();for(const k in store.best){s.add(String(k).split("::")[0]);}return s.size;}
 const BADGES=[
   {id:'first',e:'🌱',n:'첫걸음',d:'첫 학습 완료',c:s=>s.act>=1},
   {id:'perfect',e:'🏅',n:'만점왕',d:'첫 만점 달성',c:s=>s.perfect>=1},
@@ -578,6 +579,22 @@ const BADGES=[
   {id:'lv5',e:'⭐',n:'레벨 5',d:'레벨 5 달성',c:s=>levelFor(store.xp)>=5},
   {id:'wb',e:'✍️',n:'워크북 만점',d:'워크북 만점 달성',c:s=>s.wbPerfect>=1},
   {id:'chal',e:'🏆',n:'챌린저',d:'데일리 챌린지 완료',c:s=>s.challenge>=1},
+  {id:'streak14',e:'🌙',n:'2주 개근',d:'14일 연속 학습',c:s=>store.streak.count>=14},
+  {id:'streak30',e:'🏔️',n:'한 달 개근',d:'30일 연속 학습',c:s=>store.streak.count>=30},
+  {id:'lv10',e:'🌟',n:'레벨 10',d:'레벨 10 달성',c:s=>levelFor(store.xp)>=10},
+  {id:'lv20',e:'💫',n:'레벨 20',d:'레벨 20 달성',c:s=>levelFor(store.xp)>=20},
+  {id:'xp1000',e:'💎',n:'1000 XP',d:'경험치 1000 돌파',c:s=>(store.xp||0)>=1000},
+  {id:'xp5000',e:'👑',n:'5000 XP',d:'경험치 5000 돌파',c:s=>(store.xp||0)>=5000},
+  {id:'m200',e:'📘',n:'200단어 마스터',d:'200단어 숙달',c:s=>masteredCount()>=200},
+  {id:'m500',e:'🏛️',n:'500단어 마스터',d:'500단어 숙달',c:s=>masteredCount()>=500},
+  {id:'perfect5',e:'🥇',n:'만점 5회',d:'만점 5번 달성',c:s=>s.perfect>=5},
+  {id:'perfect10',e:'🎖️',n:'만점 10회',d:'만점 10번 달성',c:s=>s.perfect>=10},
+  {id:'wb5',e:'📝',n:'워크북 달인',d:'워크북 만점 5회',c:s=>s.wbPerfect>=5},
+  {id:'chal10',e:'🚀',n:'챌린지 10회',d:'데일리 챌린지 10번',c:s=>s.challenge>=10},
+  {id:'fav10',e:'🔖',n:'★ 수집가',d:'즐겨찾기 10개 저장',c:s=>favCount()>=10},
+  {id:'act100',e:'🗓️',n:'백 번의 도전',d:'학습 100회 완료',c:s=>s.act>=100},
+  {id:'review100',e:'🔁',n:'복습의 신',d:'복습 100단어 완료',c:s=>(s.review||0)>=100},
+  {id:'allsets',e:'🧭',n:'완주',d:'모든 세트 도전',c:s=>setsTried()>=SETS.length},
 ];
 function checkBadges(){const nu=[];const st=store.counts;BADGES.forEach(b=>{if(store.badges.indexOf(b.id)<0&&b.c(st)){store.badges.push(b.id);nu.push(b);}});return nu;}
 function gam_record(o){
@@ -626,6 +643,7 @@ function startReview(){let due=dueWords();
   else due=shuffle(due).slice(0,20);
   review={list:due,i:0,show:false,done:false,known:0};}
 function reviewGrade(ok){const it=review.list[review.i];srsUpdate(it.s.key,it.w.w,ok);if(ok)review.known++;addXP(1);playSound(ok?'correct':'wrong');
+  store.counts=store.counts||{act:0,perfect:0,wbPerfect:0,challenge:0};store.counts.review=(store.counts.review||0)+1;
   if(review.i+1>=review.list.length){review.done=true;store.counts=store.counts||{act:0,perfect:0,wbPerfect:0,challenge:0};store.counts.act++;touchStreak();const nb=checkBadges();saveStore();gamFX({xp:review.list.length,levelUp:0,perfect:false,badges:nb,streak:store.streak.count});}
   else{review.i++;review.show=false;saveStore();}
   render();}
@@ -1699,11 +1717,21 @@ function bind(){
     if(t.hasAttribute("data-mute")){ store.mute=!store.mute; saveStore(); render(); return; }
     if(t.hasAttribute("data-setname")){ askName(); return; }
   };
-  // 타이핑 입력창: 엔터로 제출
+  // 타이핑 입력창: 엔터로 제출 + (PC) 자동 포커스 → 마우스 없이 진행 가능
   const typein=document.getElementById("typein");
   if(typein){
     typein.onkeydown=(e)=>{ if(e.key==="Enter"){ e.preventDefault(); submitTyping(); } };
+    const isTouch = window.matchMedia && window.matchMedia("(hover: none)").matches;
+    if(!isTouch){ try{ typein.focus(); }catch(_){} }
   }
+  // 결과 화면에서 엔터로 '다음' 진행 (입력창 안에서는 제출이 우선)
+  document.onkeydown=(e)=>{
+    if(e.key!=="Enter") return;
+    const t=e.target;
+    if(t && (t.tagName==="INPUT" || t.tagName==="TEXTAREA")) return;
+    const nx=document.querySelector('[data-next]:not([disabled]),[data-exnext]:not([disabled]),[data-chnext]:not([disabled])');
+    if(nx){ e.preventDefault(); nx.click(); }
+  };
 }
 function abortRec(){ if(recog){try{recog.abort()}catch(_){}} recording=false; }
 function advance(){
