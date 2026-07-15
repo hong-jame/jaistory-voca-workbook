@@ -407,7 +407,10 @@
 @media (prefers-color-scheme:dark){.modecard.wb-card .modeicon.wb{background:#24352b;color:#8fd3ad;}}
 
 
-.gambar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0 4px;}
+.gambar{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:8px;margin:14px 0 4px;}
+.tarow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+.tascore{font-weight:800;color:var(--accent);font-size:18px;}
+.tatime{font-weight:800;font-size:18px;font-variant-numeric:tabular-nums;color:var(--ink);}
 .gcard{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:10px 6px;text-align:center;font:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center;}
 button.gcard{cursor:pointer;transition:transform .08s,box-shadow .12s;}
 button.gcard:hover{transform:translateY(-2px);box-shadow:0 5px 14px rgba(0,0,0,.1);}
@@ -595,6 +598,8 @@ const BADGES=[
   {id:'act100',e:'🗓️',n:'백 번의 도전',d:'학습 100회 완료',c:s=>s.act>=100},
   {id:'review100',e:'🔁',n:'복습의 신',d:'복습 100단어 완료',c:s=>(s.review||0)>=100},
   {id:'allsets',e:'🧭',n:'완주',d:'모든 세트 도전',c:s=>setsTried()>=SETS.length},
+  {id:'ta150',e:'⏱️',n:'스피드스터',d:'타임어택 150점',c:s=>(bestScore('_ta','timeattack')||0)>=150},
+  {id:'ta400',e:'🏁',n:'번개손',d:'타임어택 400점',c:s=>(bestScore('_ta','timeattack')||0)>=400},
 ];
 function checkBadges(){const nu=[];const st=store.counts;BADGES.forEach(b=>{if(store.badges.indexOf(b.id)<0&&b.c(st)){store.badges.push(b.id);nu.push(b);}});return nu;}
 function gam_record(o){
@@ -603,6 +608,7 @@ function gam_record(o){
   (o.results||[]).forEach(r=>{srsUpdate(o.setKey,r.w,r.ok);gained+=r.ok?2:0;});
   if(o.kind==='workbook'){gained+=o.score*2;if(o.total>0&&o.score===o.total)store.counts.wbPerfect++;}
   if(o.kind==='challenge'){store.counts.challenge++;gained+=o.score*3;}
+  if(o.kind==='timeattack'){gained+=Math.floor((o.score||0)/5);}
   const perfect=o.total>0&&o.score===o.total;if(perfect)store.counts.perfect++;
   const before=levelFor(store.xp);addXP(gained);const after=levelFor(store.xp);
   const newStreak=touchStreak();const nb=checkBadges();saveStore();
@@ -634,6 +640,7 @@ function gamHomeBar(){const xi=xpInLevel(store.xp);const pct=Math.round(xi.cur/x
     <div class="gcard"><div class="gstreak">🔥 ${store.streak.count||0}</div><div class="gsub">일 연속</div></div>
     <button class="gcard" data-review><div class="gbig">🔁 ${due}</div><div class="gsub">오늘의 복습</div></button>
     <button class="gcard" data-challenge><div class="gbig">⚡</div><div class="gsub">데일리 챌린지</div></button>
+    <button class="gcard" data-timeattack><div class="gbig">⏱️</div><div class="gsub">타임어택</div></button>
   </div>`;}
 function gamMasteryBar(key){const p=masteryPct(key);return `<div class="mast"><i style="width:${p}%"></i><span>${p}%</span></div>`;}
 /* 오늘의 복습 (SRS 플래시카드) */
@@ -667,8 +674,8 @@ function reviewHTML(){
 let challenge=null;
 function startChallenge(){let pool=[];SETS.forEach(s=>s.words.forEach(w=>{if(!isInstruction(w)&&w.mean)pool.push({s,w});}));
   pool=shuffle(pool).slice(0,10);
-  const qs=pool.map(x=>{const answer=x.w.mean.split(/[,、;\/]/)[0].trim();
-    const wrongs=shuffle(pool.filter(o=>o.w.mean!==x.w.mean)).slice(0,3).map(o=>o.w.mean.split(/[,、;\/]/)[0].trim());
+  const qs=pool.map(x=>{const answer=cleanSense(x.w.mean);
+    const wrongs=shuffle(pool.filter(o=>cleanSense(o.w.mean)!==answer)).slice(0,3).map(o=>cleanSense(o.w.mean));
     return {w:x.w,s:x.s,prompt:x.w.w,answer,options:shuffle([answer,...wrongs])};});
   challenge={qs,i:0,picked:null,score:0,combo:0,maxcombo:0,done:false};}
 function challengePick(opt){if(challenge.picked!==null)return;const q=challenge.qs[challenge.i];challenge.picked=opt;
@@ -696,6 +703,86 @@ function challengeHTML(){
     <div class="combo">${challenge.combo>=2?('🔥 '+challenge.combo+' 콤보!'):''}</div>
     <div class="exprompt">${esc(q.prompt)}</div><div class="exopts">${opts}</div>
     <button class="qnext" data-chnext ${challenge.picked===null?'disabled':''}>${challenge.i+1===challenge.qs.length?'결과 보기':'다음 →'}</button></div></div>`;}
+
+/* ===== ⏱️ 타임어택 (60초 스피드전) ===== */
+let ta=null;
+function cleanSense(m){
+  const parts=(m||'').replace(/\[[^\]]*\]/g,' ').replace(/^\s*(명|동|형|부)\s+/,'')
+    .split(/\s*\d+\s*[.)]\s*|[,、;；\/]/).map(s=>s.replace(/\([^)]*\)/g,'').trim()).filter(Boolean);
+  return parts[0]||(m||'').trim();
+}
+function taStop(){ if(window._taInt){clearInterval(window._taInt); window._taInt=null;} }
+function startTimeAttack(){
+  let pool=[]; SETS.forEach(s=>s.words.forEach(w=>{ if(!isInstruction(w)&&w.mean) pool.push({s,w}); }));
+  pool=shuffle(pool).slice(0,80);
+  const qs=pool.map(x=>{
+    const answer=cleanSense(x.w.mean);
+    const wrongs=shuffle(pool.filter(o=>cleanSense(o.w.mean)!==answer)).slice(0,3).map(o=>cleanSense(o.w.mean));
+    return {w:x.w, s:x.s, prompt:x.w.w, answer, options:shuffle([answer,...wrongs])};
+  }).filter(q=>q.options.length===4);
+  ta={qs,i:0,score:0,correct:0,combo:0,maxcombo:0,done:false,isNew:false,endAt:Date.now()+60000};
+  taStop();
+  window._taInt=setInterval(()=>{
+    if(!ta||ta.done){ taStop(); return; }
+    const left=ta.endAt-Date.now();
+    const bar=document.getElementById('tabar'), tm=document.getElementById('tatime');
+    if(bar) bar.style.width=Math.max(0,left/60000*100)+'%';
+    if(tm) tm.textContent=(Math.max(0,left)/1000).toFixed(1)+'초';
+    if(left<=0){ taFinish(); render(); }
+  },100);
+}
+function taFinish(){
+  if(!ta||ta.done) return;
+  ta.done=true; taStop();
+  const prev=bestScore('_ta','timeattack');
+  ta.isNew=(prev===null||ta.score>prev);
+  try{
+    setBest('_ta','timeattack',ta.score);
+    addHistory({date:todayStr(),pages:'⏱️ 타임어택',topic:'60초',mode:'timeattack',modeName:'⏱️ 타임어택',
+      score:ta.correct,total:ta.qs.length,pct:ta.score,retry:false});
+    gam_record({kind:'timeattack',setKey:'_ta',pages:'타임어택',topic:'',results:[],score:ta.score,total:0});
+  }catch(_){}
+  if(ta.isNew) setTimeout(()=>{ confetti(); showToast('🎉 신기록! '+ta.score+'점'); },60);
+}
+function taPick(opt){
+  if(!ta||ta.done) return;
+  const q=ta.qs[ta.i];
+  const ok=(opt===q.answer);
+  if(ok){ ta.correct++; ta.combo++; ta.maxcombo=Math.max(ta.maxcombo,ta.combo);
+    ta.score += 10 + Math.min(ta.combo-1,5)*5; playSound('correct'); }
+  else { ta.combo=0; ta.endAt-=3000; playSound('wrong'); }
+  try{ srsUpdate(q.s.key,q.w.w,ok); }catch(_){}
+  ta.i++;
+  if(ta.i>=ta.qs.length || ta.endAt-Date.now()<=0) taFinish();
+  render();
+}
+function timeAttackHTML(){
+  if(!ta) return '';
+  if(ta.done){
+    const best=bestScore('_ta','timeattack')||0;
+    return `<header><button class="backbtn" data-home>‹ 홈</button><h1>⏱️ 타임어택 결과</h1></header>
+    <div class="speak-test"><div class="stresult">
+      <div class="score">${ta.score}점</div>
+      <div class="lbl">${ta.isNew?'🎉 신기록 달성!':'최고 기록 '+best+'점'}</div>
+      <div class="bestline">맞힌 개수 ${ta.correct} · 최고 콤보 🔥 ${ta.maxcombo}</div>
+      <button class="stbtn solid" data-timeattack style="margin-top:16px;width:100%;">⏱️ 다시 도전</button>
+      <button class="stbtn ghost" data-home style="margin-top:10px;width:100%;">홈으로</button>
+    </div></div>`;
+  }
+  const q=ta.qs[ta.i];
+  const opts=q.options.map(o=>`<button class="exopt" data-taopt="${esc(o)}">${esc(o)}</button>`).join('');
+  const left=Math.max(0,ta.endAt-Date.now());
+  return `<header><button class="backbtn" data-home>‹ 홈</button><h1>⏱️ 타임어택</h1>
+    <div class="sub">60초 안에 최대한 많이! · 오답 -3초 · 콤보 보너스</div></header>
+  <div class="quiz"><div class="qcard">
+    <div class="tarow"><span class="tascore">${ta.score}점</span><span class="tatime" id="tatime">${(left/1000).toFixed(1)}초</span></div>
+    <div class="qbar"><i id="tabar" style="width:${left/60000*100}%"></i></div>
+    <div class="combo">${ta.combo>=2?('🔥 '+ta.combo+' 콤보! +'+(10+Math.min(ta.combo-1,5)*5)+'점'):''}</div>
+    <div class="exprompt">${esc(q.prompt)}</div>
+    <div class="exopts">${opts}</div>
+  </div></div>`;
+}
+
 function badgesHTML(){const cards=BADGES.map(b=>{const on=store.badges.indexOf(b.id)>=0;
   return `<div class="bgcard ${on?'on':''}"><div class="bgemoji">${b.e}</div><div class="bgname">${esc(b.n)}</div><div class="bgdesc">${esc(b.d)}</div></div>`;}).join('');
   const xi=xpInLevel(store.xp);
@@ -1351,6 +1438,7 @@ function showShareModal(text){
 /* ---- 렌더 ---- */
 function render(){
   const app=document.getElementById("app");
+  if(state.view!=="timeattack") taStop();
   if(state.view==="home")app.innerHTML=homeHTML();
   else if(state.view==="modes")app.innerHTML=modesHTML();
   else if(state.view==="study")app.innerHTML=studyHTML();
@@ -1360,6 +1448,7 @@ function render(){
   else if(state.view==="workbook")app.innerHTML=workbookHTML();
   else if(state.view==="review")app.innerHTML=reviewHTML();
   else if(state.view==="challenge")app.innerHTML=challengeHTML();
+  else if(state.view==="timeattack")app.innerHTML=timeAttackHTML();
   else if(state.view==="badges")app.innerHTML=badgesHTML();
   bind();
   if(state.view==="workbook") wireWorkbook();
@@ -1668,7 +1757,7 @@ function recordOnce(){
 function bind(){
   const app=document.getElementById("app");
   app.onclick=(e)=>{
-    const t=e.target.closest("[data-set],[data-home],[data-modes],[data-go],[data-test],[data-exquiz],[data-exopt],[data-exnext],[data-exretry],[data-exhint],[data-w],[data-speak],[data-mic],[data-submit],[data-next],[data-skip],[data-skip2],[data-retry],[data-retrywrong],[data-fav],[data-studyall],[data-studyfav],[data-share],[data-history],[data-setname],[data-workbook],[data-review],[data-challenge],[data-badges],[data-revshow],[data-revgrade],[data-chopt],[data-chnext],[data-mute]");
+    const t=e.target.closest("[data-set],[data-home],[data-modes],[data-go],[data-test],[data-exquiz],[data-exopt],[data-exnext],[data-exretry],[data-exhint],[data-w],[data-speak],[data-mic],[data-submit],[data-next],[data-skip],[data-skip2],[data-retry],[data-retrywrong],[data-fav],[data-studyall],[data-studyfav],[data-share],[data-history],[data-setname],[data-workbook],[data-review],[data-challenge],[data-badges],[data-revshow],[data-revgrade],[data-chopt],[data-chnext],[data-mute],[data-timeattack],[data-taopt]");
     if(!t)return;
     if(t.hasAttribute("data-speak")){ e.stopPropagation(); speak(t.getAttribute("data-speak"), t, t.getAttribute("data-lang")||"en"); return; }
     if(t.hasAttribute("data-exquiz")){ startExQuiz(t.getAttribute("data-exquiz")); state.view="exquiz"; scrollTo(0,0); render(); return; }
@@ -1709,6 +1798,8 @@ function bind(){
     if(t.hasAttribute("data-workbook")){ state.view="workbook"; scrollTo(0,0); render(); return; }
     if(t.hasAttribute("data-review")){ startReview(); state.view="review"; scrollTo(0,0); render(); return; }
     if(t.hasAttribute("data-challenge")){ startChallenge(); state.view="challenge"; scrollTo(0,0); render(); return; }
+    if(t.hasAttribute("data-timeattack")){ startTimeAttack(); state.view="timeattack"; scrollTo(0,0); render(); return; }
+    if(t.hasAttribute("data-taopt")){ taPick(t.getAttribute("data-taopt")); return; }
     if(t.hasAttribute("data-badges")){ state.view="badges"; scrollTo(0,0); render(); return; }
     if(t.hasAttribute("data-revshow")){ review.show=true; render(); return; }
     if(t.hasAttribute("data-revgrade")){ reviewGrade(t.getAttribute("data-revgrade")==="1"); return; }
