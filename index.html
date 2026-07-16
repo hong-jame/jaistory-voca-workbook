@@ -1808,21 +1808,25 @@ function bind(){
     if(t.hasAttribute("data-mute")){ store.mute=!store.mute; saveStore(); render(); return; }
     if(t.hasAttribute("data-setname")){ askName(); return; }
   };
-  // 타이핑 입력창: 엔터로 제출 + (PC) 자동 포커스 → 마우스 없이 진행 가능
+  // (PC) 시험 입력창 자동 포커스 → 마우스 없이 키보드만으로 진행
   const typein=document.getElementById("typein");
   if(typein){
-    typein.onkeydown=(e)=>{ if(e.key==="Enter"){ e.preventDefault(); submitTyping(); } };
     const isTouch = window.matchMedia && window.matchMedia("(hover: none)").matches;
-    if(!isTouch){ try{ typein.focus(); }catch(_){} }
+    if(!isTouch){ try{ typein.focus(); typein.select&&typein.select(); }catch(_){} }
   }
-  // 결과 화면에서 엔터로 '다음' 진행 (입력창 안에서는 제출이 우선)
-  document.onkeydown=(e)=>{
-    if(e.key!=="Enter") return;
-    const t=e.target;
-    if(t && (t.tagName==="INPUT" || t.tagName==="TEXTAREA")) return;
-    const nx=document.querySelector('[data-next]:not([disabled]),[data-exnext]:not([disabled]),[data-chnext]:not([disabled])');
-    if(nx){ e.preventDefault(); nx.click(); }
-  };
+  // 엔터 처리: window 전역 캡처 리스너 1개로 통일(어떤 브라우저/포커스에서도 확실히 동작)
+  //  · 시험 입력창(#typein)에 포커스: 엔터=제출  · 그 외 입력창: 각자 처리  · 나머지: '다음' 버튼 클릭
+  if(!window._enterNav){
+    window._enterNav=true;
+    window.addEventListener("keydown",function(e){
+      if((e.key!=="Enter" && e.keyCode!==13 && e.which!==13) || e.isComposing) return;
+      const ae=document.activeElement;
+      if(ae && ae.id==="typein"){ e.preventDefault(); if(typeof submitTyping==="function") submitTyping(); return; }
+      if(ae && (ae.tagName==="INPUT" || ae.tagName==="TEXTAREA")) return;
+      const nx=document.querySelector('[data-next]:not([disabled]),[data-exnext]:not([disabled]),[data-chnext]:not([disabled])');
+      if(nx){ e.preventDefault(); e.stopPropagation(); nx.click(); }
+    }, true);
+  }
 }
 function abortRec(){ if(recog){try{recog.abort()}catch(_){}} recording=false; }
 function advance(){
