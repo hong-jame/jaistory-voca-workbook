@@ -1810,9 +1810,13 @@ function bind(){
   };
   // (PC) 시험 입력창 자동 포커스 → 마우스 없이 키보드만으로 진행
   const typein=document.getElementById("typein");
+  const _isTouch = window.matchMedia && window.matchMedia("(hover: none)").matches;
   if(typein){
-    const isTouch = window.matchMedia && window.matchMedia("(hover: none)").matches;
-    if(!isTouch){ try{ typein.focus(); typein.select&&typein.select(); }catch(_){} }
+    if(!_isTouch){ try{ typein.focus(); typein.select&&typein.select(); }catch(_){} }
+  } else if(!_isTouch){
+    // 결과/문제 화면: '다음' 버튼에 포커스 → 엔터를 누르면 브라우저가 그 버튼을 눌러줌(네이티브)
+    const _nb=document.querySelector('[data-next]:not([disabled]),[data-exnext]:not([disabled]),[data-chnext]:not([disabled])');
+    if(_nb){ try{ _nb.focus(); }catch(_){} }
   }
   // 엔터 처리: window 전역 캡처 리스너 1개로 통일(어떤 브라우저/포커스에서도 확실히 동작)
   //  · 시험 입력창(#typein)에 포커스: 엔터=제출  · 그 외 입력창: 각자 처리  · 나머지: '다음' 버튼 클릭
@@ -1822,7 +1826,7 @@ function bind(){
       if((e.key!=="Enter" && e.keyCode!==13 && e.which!==13) || e.isComposing) return;
       const ae=document.activeElement;
       if(ae && ae.id==="typein"){ e.preventDefault(); if(typeof submitTyping==="function") submitTyping(); return; }
-      if(ae && (ae.tagName==="INPUT" || ae.tagName==="TEXTAREA")) return;
+      if(ae && (ae.tagName==="INPUT" || ae.tagName==="TEXTAREA" || ae.tagName==="BUTTON")) return;
       const nx=document.querySelector('[data-next]:not([disabled]),[data-exnext]:not([disabled]),[data-chnext]:not([disabled])');
       if(nx){ e.preventDefault(); e.stopPropagation(); nx.click(); }
     }, true);
