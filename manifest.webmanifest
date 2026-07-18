@@ -1,0 +1,15 @@
+{
+  "name": "중2 자이스토리 영어 단어장",
+  "short_name": "자이VOCA",
+  "description": "자이스토리 중등 영어 독해 기본 2 단어장 · 말하기·받아쓰기 시험 + 워크북",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2f5fb",
+  "theme_color": "#1F3864",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
