@@ -1,5 +1,5 @@
 /* 영어 단어장 PWA 서비스워커 — 네트워크 우선(항상 최신) + 오프라인 캐시 폴백 */
-const CACHE = 'voca-v20';
+const CACHE = 'voca-v21';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
